@@ -28,7 +28,7 @@ MAX_FILE_SIZE_BYTES = 100 * 1024 * 1024
 MAX_VIDEO_DURATION_SECONDS = 3600
 
 URL_PATTERN = re.compile(
-    r"(?:youtube\\.com/(?:embed/|shorts/|watch\\?v=)|"
+    r"(?:youtube\.com/(?:embed/|shorts/|watch\?v=)|"
     r"youtu\\.be/|[?&]v=)([a-zA-Z0-9_-]{11})"
 )
 ALLOWED_HOSTS = {
