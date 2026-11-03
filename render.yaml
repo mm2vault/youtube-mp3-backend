@@ -1,0 +1,10 @@
+# render.yaml
+# Render Blueprint configuration for the Docker-based Flask API.
+
+services:
+  - type: web
+    name: youtube-mp3-backend
+    runtime: docker
+    plan: free
+    healthCheckPath: /health
+    autoDeploy: true
