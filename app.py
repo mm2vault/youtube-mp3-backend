@@ -202,6 +202,48 @@ def convert_file():
         source.unlink(missing_ok=True)
 
 
+
+@app.post("/api/convert-file")
+def convert_file():
+    cleanup_old_files()
+    from werkzeug.utils import secure_filename
+    uploaded = request.files.get("file")
+    if not uploaded or not uploaded.filename:
+        return jsonify({"error": "Lütfen bir medya dosyası seçin."}), 400
+    filename = secure_filename(uploaded.filename)
+    extension = Path(filename).suffix.lower()
+    allowed = {".mp4", ".mov", ".mkv", ".webm", ".mp3", ".wav", ".m4a", ".aac", ".ogg", ".flac"}
+    if extension not in allowed:
+        return jsonify({"error": "Desteklenmeyen medya dosyası."}), 415
+
+    token = secrets.token_urlsafe(32)
+    source = TEMP_DIR / (token + ".source" + extension)
+    output = TEMP_DIR / (token + ".mp3")
+    try:
+        uploaded.save(source)
+        if not source.is_file() or source.stat().st_size == 0:
+            return jsonify({"error": "Dosya boş."}), 400
+        if source.stat().st_size > MAX_FILE_SIZE_BYTES:
+            return jsonify({"error": "Dosya 100 MB sınırını aşıyor."}), 413
+        probe = subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", str(source)], capture_output=True, text=True, timeout=20)
+        duration = float(probe.stdout.strip()) if probe.returncode == 0 else 0
+        if duration <= 0 or duration > MAX_VIDEO_DURATION_SECONDS:
+            return jsonify({"error": "Dosya okunamadı veya 60 dakikadan uzun."}), 422
+        converted = subprocess.run(["ffmpeg", "-nostdin", "-y", "-i", str(source), "-vn", "-map", "0:a:0", "-codec:a", "libmp3lame", "-q:a", "0", str(output)], capture_output=True, text=True, timeout=CONVERSION_TIMEOUT_SECONDS)
+        if converted.returncode != 0 or not output.is_file() or output.stat().st_size == 0:
+            return jsonify({"error": "Dosyadan ses çıkarılamadı."}), 422
+        return jsonify({"token": token, "title": Path(filename).stem[:180]}), 200
+    except subprocess.TimeoutExpired:
+        output.unlink(missing_ok=True)
+        return jsonify({"error": "Dönüştürme zaman aşımına uğradı."}), 408
+    except Exception:
+        output.unlink(missing_ok=True)
+        app.logger.exception("File conversion failed")
+        return jsonify({"error": "Dosya dönüştürülürken hata oluştu."}), 500
+    finally:
+        source.unlink(missing_ok=True)
+
+
 @app.get("/api/download/<token>")
 def download(token):
     cleanup_old_files()
